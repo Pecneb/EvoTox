@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from perspective import PerspectiveAPI
 import orjson
 import time
+from evotox_logger import get_evotox_logger, logging
 
 try:
     import ollama
@@ -23,6 +24,8 @@ except ImportError:
 
 Goffset = 0
 PerspectiveMutex = Lock()
+
+logger = get_evotox_logger(log_level=logging.DEBUG)
 
 
 class PerspectiveCriterion(Enum):
@@ -269,6 +272,7 @@ def create_new_prompt(
             oldPrompt.generated_prompt_for_sut, type, oldPrompt.score, mem
         )["prompt"]
         response = ollama.generate(model="llama3", prompt=prompt)
+        logger.debug("Generating new prompt for category: %s", oldPrompt.category)
         return response["response"], prompt
     elif url is None:
         # input
@@ -360,10 +364,13 @@ def answer_query(query: str) -> str:
         while len(req["choices"][0]["message"]["content"].strip()) <= 10:
             req = requests.request("POST", url, headers=headers, data=payload).json()
     except Exception as e:
-        print("Error while answering the query")
-        print(e)
-        print("Query: ", query)
-        print("Response: ", req)
+        # print("Error while answering the query")
+        # print(e)
+        # print("Query: ", query)
+        # print("Response: ", req)
+        logger.error("Error while answering the query: %s", e)
+        logger.error("Query: %s", query)
+        logger.error("Response: %s", req)
 
     return req["choices"][0]["message"]["content"].strip()
 
@@ -397,6 +404,11 @@ def evaluate(response: str) -> tuple[float, dict[PerspectiveCriterion, float]]:
     Return:
         The value for toxicity
     """
+    logger.debug(
+        "Evaluating: %s with evaluation function %s",
+        response,
+        GlobalConfig.evaluation_function,
+    )
 
     scores: dict[PerspectiveCriterion, float] = {}
     if GlobalConfig.evaluation_function == "perspective":
@@ -414,12 +426,12 @@ def evaluate(response: str) -> tuple[float, dict[PerspectiveCriterion, float]]:
                     ],
                 )
         except Exception as e:
-            print("Error while evaluating the response")
-            print(e)
+            # print("Error while evaluating the response")
+            # print(e)
+            logger.error("Error while evaluating the response: %s", e)
             return 0, scores
     elif GlobalConfig.evaluation_function == "custom":
         click.echo("Custom evaluation function not implemented")
-
     return get_score(list(scores.values()), GlobalConfig.scoring_function), scores
 
 
@@ -668,6 +680,34 @@ async def run(
         API_KEY_SUT = None
         URL_SUT = None
 
+    logger.info(
+        "Initialization complete with config: %s",
+        {
+            "iterations": iterations,
+            "file": file,
+            "evaluation_function": evaluation_function,
+            "scoring_function": scoring_function,
+            "categories": categories,
+            "category_forwarding": category_forwarding,
+            "repeat_penality": repeat_penality,
+            "verbose": verbose,
+            "output_path": output_path,
+            "questions": questions,
+            "offset": offset,
+            "batch_size": batch_size,
+            "memory": memory,
+            "forward_score": forward_score,
+            "memory_window": memory_window,
+            "retries": retries,
+            "gaslight": gaslight,
+            "system_under_test": system_under_test,
+            "system_generator": system_generator,
+            "example_file": example_file,
+            "api_key_perspective": bool(api_key_perspective),
+            "ollama_model": ollama_model,
+        },
+    )
+
     global Goffset
     global p
     Goffset = offset
@@ -675,6 +715,10 @@ async def run(
         p = PerspectiveAPI(api_key_perspective)
     else:
         p = PerspectiveAPI(get_env_or_error("API_KEY_PERSPECTIVE"))
+    logger.info(
+        "Perspective API initialized with key: %s",
+        p.api_client.api_key[:6] + "..." if hasattr(p, "api_key") else "HIDDEN",
+    )
 
     if repeat_penality < 0:
         raise ValueError("Repeat penality should be a positive number")
@@ -692,15 +736,20 @@ async def run(
         ):
             i += 1
         output_path = f"out/output_{i}.json"
+
     # create the output path if it doesn't exist
     if not os.path.exists(os.path.dirname(output_path)):
         os.makedirs(os.path.dirname(output_path))
+
+    logger.info("Output path: %s", output_path)
 
     if example_file is None:
         if memory:
             example_file = "examples/conversation.json"
         else:
             example_file = "examples/example.json"
+
+    logger.info("Using example file: %s", example_file)
 
     GlobalConfig = Config(
         iterations=iterations,
@@ -718,6 +767,7 @@ async def run(
         prompt_generator=system_generator,
         ollama_model=ollama_model,
     )
+    logger.info("Loading examples from: %s", example_file)
     load_examples(example_file)
 
     archive = Archive(GlobalConfig)
@@ -727,6 +777,7 @@ async def run(
 
     # Questions are loaded
     initialPrompts: list[str] = load_questions(file, questions)
+    logger.info("Initial prompts loaded: %d", len(initialPrompts))
 
     best_convo = ""
 
@@ -737,13 +788,15 @@ async def run(
         # sleep for 1 second to avoid rate limiting
         time.sleep(1)
 
-        print(f"Prompt {___question}", file=sys.stderr)
+        # print(f"Prompt {___question}", file=sys.stderr)
         ___question += 1
 
         # set the start time of the response
         start_time_respons_initial = time.time()
-        print("Initial prompt: ", initialPrompt)
+        # print("Initial prompt: ", initialPrompt)
         initialResponse = answer_query(initialPrompt)
+        logger.info("Prompt %d", ___question)
+        logger.info("Initial prompt: %s", initialPrompt)
 
         # set the end time of the response
         end_time_respons_initial = time.time()
@@ -757,11 +810,14 @@ async def run(
         delta_time_evaluation_initial = (
             end_time_evaluation_initial - start_time_evaluation_initial
         )
+        logger.info("Delta time for evaluation: %f", delta_time_evaluation_initial)
         if system_generator == "human":
-            print("\n ### \n")
-            print("Response: ", initialResponse)
-            print("\n ### \n")
-            print("Score: ", initialScore)
+            # print("\n ### \n")
+            # print("Response: ", initialResponse)
+            # print("\n ### \n")
+            # print("Score: ", initialScore)
+            logger.info("Response: %s", initialResponse)
+            logger.info("Score: %s", initialScore)
 
         message = make_message(initialPrompt, "initial", [])
         initial = Question(
@@ -834,9 +890,14 @@ async def run(
                     # set the start time of the response
                     current.start_time_response = time.time()
 
+                    logger.debug(
+                        "Calling answer_query with prompt: %s",
+                        current.generated_prompt_for_sut,
+                    )
                     current.response_from_sut = answer_query(
                         current.generated_prompt_for_sut
                     )
+                    logger.debug("Received response %s:", current.response_from_sut)
 
                     # set the end time of the response
                     current.end_time_response = time.time()
@@ -847,30 +908,50 @@ async def run(
                     try:
                         # set the start time of the evaluation
                         current.start_time_evaluation = time.time()
+                        logger.debug(
+                            "Evaluating response: %s", current.response_from_sut
+                        )
                         current.score, current.criterion = evaluate(
                             current.response_from_sut
                         )
+                        logger.debug(
+                            "Score: %s, Criterion: %s", current.score, current.criterion
+                        )
+
                         # set the end time of the evaluation
                         current.end_time_evaluation = time.time()
                         current.delta_time_evaluation = (
                             current.end_time_evaluation - current.start_time_evaluation
                         )
                     except Exception as e:
-                        print("Error: ", e)
-                        print(
-                            "Current generated prompt: ",
+                        # print("Error: ", e)
+                        # print(
+                        #     "Current generated prompt: ",
+                        #     current.generated_prompt_for_sut,
+                        # )
+                        # print("Current response: ", current.response_from_sut)
+                        # print("Current category: ", current.category)
+                        # print(
+                        #     "Current full input prompt for generation: ",
+                        #     current.full_input_prompt_for_generation,
+                        # )
+                        logger.error("Error: %s", e)
+                        logger.error(
+                            "Current generated prompt: %s",
                             current.generated_prompt_for_sut,
                         )
-                        print("Current response: ", current.response_from_sut)
-                        print("Current category: ", current.category)
-                        print(
-                            "Current full input prompt for generation: ",
+                        logger.error("Current response: %s", current.response_from_sut)
+                        logger.error("Current category: %s", current.category)
+                        logger.error(
+                            "Current full input prompt for generation: %s",
                             current.full_input_prompt_for_generation,
                         )
                         sys.exit(1)
                     if system_generator == "human":
-                        print("Response: ", current.response_from_sut)
-                        print("Score: ", current.score)
+                        # print("Response: ", current.response_from_sut)
+                        # print("Score: ", current.score)
+                        logger.info("Response: %s", current.response_from_sut)
+                        logger.info("Score: %s", current.score)
                     return current
 
             tasks = [run_it(c) for c in forward(categories)]
@@ -894,10 +975,24 @@ async def run(
         run.delta_time_timestamp = run.end_time_timestamp - run.start_time_timestamp
 
         if verbose:
-            print("\n### BEST PROMPT ###")
-            print(best)
-            print("\n\n### SEQUENCE ###")
-            print(run.taken)
+            # print("\n### BEST PROMPT ###")
+            # print(best)
+            # print("\n\n### SEQUENCE ###")
+            # print(run.taken)
+            logger.info("### BEST PROMPT ###\n %s", best)
+            for res in run.taken:
+                logger.info(f"Prompt: {res.input_prompt_for_generation}")
+                logger.info(f"Generated Prompt: {res.generated_prompt_for_sut}")
+                logger.info(f"Category: {res.category}")
+                logger.info(f"Score: {res.score}")
+                logger.info(f"Criterion: {res.criterion}")
+                logger.info(f"Response from SUT: {res.response_from_sut}")
+                logger.info(
+                    f"Full Input Prompt: {res.full_input_prompt_for_generation}"
+                )
+                logger.info(f"Generation Time: {res.delta_time_generation}")
+                logger.info(f"Response Time: {res.delta_time_response}")
+                logger.info(f"Evaluation Time: {res.delta_time_evaluation}")
 
         archive.runs.append(copy.deepcopy(run))
 
