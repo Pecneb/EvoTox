@@ -66,3 +66,13 @@ If the number of iterations is different, the scores and query
 | `--output-path` | `-o`  | yes      | `Path` | `out/merged.json` | Path to save the output |
 | `--file1`       | `-f1` | yes      | `Path` | ``                | Path to source file 1   |
 | `--file2`       | `-f2` | yes      | `Path` | ``                | Path to source file 2   |
+
+
+## Next steps: (use prompt generator not as chat mode but as text completion mode)
+
+- Use Ollama evaluation agent to not only give scores but give some explanation why did it give those specific scores.
+- Use the evaluation model why did the jailbreak technique got refused, and give the prompt generator a feedback what not to do or what to do better to be able to persuade the system under test.
+
+```sh
+python3 evolutionary.py -f dataset/MaliciousInstruct --verbose -o results/test.json --evaluation-function ollama --verbose -sut ollama -sg ollama --iterations 1
+```
