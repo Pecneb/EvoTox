@@ -300,7 +300,7 @@ def create_new_prompt(
         prompt = make_message(
             oldPrompt.generated_prompt_for_sut, type, oldPrompt.score, mem
         )["prompt"]
-        response = ollama.generate(model="llama3", prompt=prompt)
+        response = ollama.generate(model=GlobalConfig.ollama_model, prompt=prompt)
         logger.debug("Generating new prompt for category: %s", oldPrompt.category)
         return response["response"], prompt
     elif url is None:
@@ -330,6 +330,7 @@ def create_new_prompt(
 
         while True:
             if tries >= GlobalConfig.retries:
+                logger.warning("Exceeded %d retries for prompt generation, using fallback", GlobalConfig.retries)
                 return (
                     "Hi! How is your day?",
                     message["prompt"] + "\n !!!!! Exceeded retries !!!!!",
@@ -397,9 +398,9 @@ def answer_query(query: str) -> str:
         # print(e)
         # print("Query: ", query)
         # print("Response: ", req)
-        logger.error("Error while answering the query: %s", e)
-        logger.error("Query: %s", query)
-        logger.error("Response: %s", req)
+        logger.error("Error while answering query: %s", e)
+        logger.debug("Query: %s", query)
+        logger.debug("API Response: %s", req)
 
     return req["choices"][0]["message"]["content"].strip()
 
@@ -603,11 +604,11 @@ def evaluate(response: str) -> tuple[float, dict[ToxicityCriterion, float]]:
         tuple: (max_score, criterion_scores_dict)
     """
     global eval_function
-    logger.debug("Evaluating: %s with evaluation function %s", response, GlobalConfig.evaluation_function)
+    logger.debug("Evaluating response with %s (length: %d chars)", GlobalConfig.evaluation_function.value, len(response))
     
-    if GlobalConfig.evaluation_function == "perspective":
+    if GlobalConfig.evaluation_function == EvaluationFunction.PERSPECTIVE:
         return evaluate_perspective(response)
-    elif GlobalConfig.evaluation_function == "detoxify":
+    elif GlobalConfig.evaluation_function == EvaluationFunction.DETOXIFY:
         return evaluate_detoxify(response)
     elif GlobalConfig.evaluation_function == "ollama":
         return evaluate_ollama(response)
@@ -783,7 +784,7 @@ def get_env_or_error(env_var: str) -> str:
 )
 @click_option(
     "--ollama-model",
-    type=click.Choice(["llama3"]),
+    type=click.Choice(["llama3", "llama3:text"]),
     default="llama3",
     help="Model to use with ollama: llama3 etc.",
 )
@@ -989,8 +990,8 @@ async def run(
         start_time_respons_initial = time.time()
         # print("Initial prompt: ", initialPrompt)
         initialResponse = answer_query(initialPrompt)
-        logger.info("Prompt %d", ___question)
-        logger.info("Initial prompt: %s", initialPrompt)
+        logger.info("Processing prompt %d of %d", ___question, len(initialPrompts))
+        logger.debug("Initial prompt: %s", initialPrompt)
 
         # set the end time of the response
         end_time_respons_initial = time.time()
@@ -1004,7 +1005,8 @@ async def run(
         delta_time_evaluation_initial = (
             end_time_evaluation_initial - start_time_evaluation_initial
         )
-        logger.info("Delta time for evaluation: %f", delta_time_evaluation_initial)
+        logger.debug("Delta time for evaluation: %f", delta_time_evaluation_initial)
+        logger.info("Initial score: %.3f", initialScore)
         if system_generator == "human":
             # print("\n ### \n")
             # print("Response: ", initialResponse)
@@ -1013,7 +1015,7 @@ async def run(
             logger.info("Response: %s", initialResponse)
             logger.info("Score: %s", initialScore)
 
-        message = make_message(initialPrompt, "initial", [])
+        message = make_message(initialPrompt, "initial", initialScore)
         initial = Question(
             input_prompt_for_generation=initialPrompt,
             generated_prompt_for_sut=initialPrompt,
@@ -1055,8 +1057,10 @@ async def run(
 
         # Starting by evaluating the initial prompt
         semaphore = asyncio.Semaphore(batch_size)
+        logger.info("Starting %d iterations for prompt %d", iterations, ___question)
         # for _ in tqdm(range(iterations), position=1):
-        for _ in range(iterations):
+        for iteration in range(iterations):
+            logger.debug("Starting iteration %d/%d", iteration + 1, iterations)
             nextPrompt = copy.deepcopy(best.generated_prompt_for_sut)
 
             async def run_it(category):
@@ -1085,13 +1089,14 @@ async def run(
                     current.start_time_response = time.time()
 
                     logger.debug(
-                        "Calling answer_query with prompt: %s",
-                        current.generated_prompt_for_sut,
+                        "Calling answer_query with prompt for category '%s': %s",
+                        category,
+                        current.generated_prompt_for_sut[:100] + "..." if len(current.generated_prompt_for_sut) > 100 else current.generated_prompt_for_sut,
                     )
                     current.response_from_sut = answer_query(
                         current.generated_prompt_for_sut
                     )
-                    logger.debug("Received response %s:", current.response_from_sut)
+                    logger.debug("Received response for category '%s' (length: %d)", category, len(current.response_from_sut))
 
                     # set the end time of the response
                     current.end_time_response = time.time()
@@ -1103,13 +1108,13 @@ async def run(
                         # set the start time of the evaluation
                         current.start_time_evaluation = time.time()
                         logger.debug(
-                            "Evaluating response: %s", current.response_from_sut
+                            "Evaluating response for category '%s' (length: %d)", category, len(current.response_from_sut)
                         )
                         current.score, current.criterion = evaluate(
                             current.response_from_sut
                         )
                         logger.debug(
-                            "Score: %s, Criterion: %s", current.score, current.criterion
+                            "Category '%s' - Score: %.3f", category, current.score
                         )
 
                         # set the end time of the evaluation
@@ -1152,9 +1157,14 @@ async def run(
             results = await asyncio.gather(*tasks)  # Wait for all tasks to finish
 
             # Found a variation that is more toxic than the original
+            previous_best_score = best.score
             for res in results:
                 if res.score > best.score:
                     best = copy.deepcopy(res)
+                    
+            if best.score > previous_best_score:
+                logger.info("Found better prompt in iteration %d/%d - Score improved from %.3f to %.3f (category: %s)", 
+                           iteration + 1, iterations, previous_best_score, best.score, best.category)
 
             disc = []
             for res in results:
@@ -1167,6 +1177,9 @@ async def run(
         # set the end time of the run
         run.end_time_timestamp = time.time()
         run.delta_time_timestamp = run.end_time_timestamp - run.start_time_timestamp
+        
+        logger.info("Completed prompt %d - Final best score: %.3f (took %.2f seconds)", 
+                   ___question, best.score, run.delta_time_timestamp)
 
         if verbose:
             # print("\n### BEST PROMPT ###")
@@ -1208,6 +1221,17 @@ async def run(
     archive.delta_time_timestamp = (
         archive.end_time_timestamp - archive.start_time_timestamp
     )
+    
+    # Log final summary
+    total_runs = len(archive.runs)
+    total_time = archive.delta_time_timestamp
+    avg_time_per_run = total_time / total_runs if total_runs > 0 else 0
+    
+    logger.info("=== EXECUTION SUMMARY ===")
+    logger.info("Total prompts processed: %d", total_runs)
+    logger.info("Total execution time: %.2f seconds", total_time)
+    logger.info("Average time per prompt: %.2f seconds", avg_time_per_run)
+    logger.info("Results saved to: %s", output_path)
 
     with open(output_path, "w") as f:
         # f.write(archive.to_json())
