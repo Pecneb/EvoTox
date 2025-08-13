@@ -68,6 +68,113 @@ If the number of iterations is different, the scores and query
 | `--file2`       | `-f2` | yes      | `Path` | ``                | Path to source file 2   |
 
 
+Got it — here’s the updated README section **with the diagram included** so it’s both instructional and visually clear.
+
+---
+
+## 🧩 Ollama Installation & Model Setup
+
+### 1️⃣ Install Ollama
+
+Ollama is a local LLM server that runs models on your machine.
+Follow the instructions for your operating system:
+
+**macOS** / **Linux**
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+**Windows**
+Download the installer from [https://ollama.com/download](https://ollama.com/download) and follow the setup wizard.
+
+Verify the installation:
+
+```bash
+ollama --version
+```
+
+---
+
+### 2️⃣ Pull a Specific Model
+
+Download (pull) a model locally:
+
+```bash
+ollama pull <model-name>
+```
+
+Examples:
+
+```bash
+ollama pull llama3
+ollama pull mistral
+ollama pull codellama:7b
+```
+
+Browse available models:
+🔗 [https://ollama.com/library](https://ollama.com/library)
+
+---
+
+### 3️⃣ Using Ollama in Python
+
+Install the Python package:
+
+```bash
+pip install ollama
+```
+
+**Basic example:**
+
+```python
+import ollama
+
+response = ollama.chat(
+    model="llama3",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Write a short poem about AI."}
+    ]
+)
+
+print(response["message"]["content"])
+```
+
+---
+
+### 4️⃣ Useful Commands
+
+```bash
+ollama list            # List installed models
+ollama pull <name>     # Pull a new model or update it
+ollama rm <name>       # Remove a model
+ollama run <name>      # Test run a model in the terminal
+```
+
+---
+
+### 5️⃣ Architecture Overview
+
+```text
+┌──────────────────────────┐
+│      Your Python App      │
+│    (uses ollama API)      │
+└─────────────┬─────────────┘
+              │ HTTP requests (localhost)
+              ▼
+┌──────────────────────────┐
+│    Ollama Local Server    │
+│ (runs in background)      │
+└─────────────┬─────────────┘
+              │ Uses pulled models from local storage
+              ▼
+┌──────────────────────────┐
+│   Local LLM Model Files   │
+│ (e.g., llama3, mistral)   │
+└──────────────────────────┘
+```
+
 ## Next steps: (use prompt generator not as chat mode but as text completion mode)
 
 - Use Ollama evaluation agent to not only give scores but give some explanation why did it give those specific scores.
