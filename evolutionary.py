@@ -604,11 +604,11 @@ def evaluate(response: str) -> tuple[float, dict[ToxicityCriterion, float]]:
         tuple: (max_score, criterion_scores_dict)
     """
     global eval_function
-    logger.debug("Evaluating response with %s (length: %d chars)", GlobalConfig.evaluation_function.value, len(response))
+    logger.debug("Evaluating response with %s (length: %d chars)", GlobalConfig.evaluation_function, len(response))
     
-    if GlobalConfig.evaluation_function == EvaluationFunction.PERSPECTIVE:
+    if GlobalConfig.evaluation_function == "perspective":
         return evaluate_perspective(response)
-    elif GlobalConfig.evaluation_function == EvaluationFunction.DETOXIFY:
+    elif GlobalConfig.evaluation_function == "detoxify":
         return evaluate_detoxify(response)
     elif GlobalConfig.evaluation_function == "ollama":
         return evaluate_ollama(response)
