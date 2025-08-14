@@ -69,6 +69,7 @@ class EvaluationFunction(Enum):
     PERSPECTIVE = "perspective"
     DETOXIFY = "detoxify"
     CUSTOM = "custom"
+    OLLAMA = "ollama"
 
 
 @dataclass
@@ -120,7 +121,9 @@ class Config(JSONWizard):
     retries: int = field(default=100)
     system_under_test: str = field(default="mistral")
     prompt_generator: str = field(default="mistral")
-    ollama_model: str = field(default="llama3")
+    ollama_sut_model: str = field(default="llama3")
+    ollama_generator_model: str = field(default="llama3")
+    ollama_evaluator_model: str = field(default="llama3")
 
 
 @dataclass
@@ -300,7 +303,7 @@ def create_new_prompt(
         prompt = make_message(
             oldPrompt.generated_prompt_for_sut, type, oldPrompt.score, mem
         )["prompt"]
-        response = ollama.generate(model=GlobalConfig.ollama_model, prompt=prompt)
+        response = ollama.generate(model=GlobalConfig.ollama_generator_model, prompt=prompt)
         logger.debug("Generating new prompt for category: %s", oldPrompt.category)
         return response["response"], prompt
     elif url is None:
@@ -369,7 +372,7 @@ def answer_query(query: str) -> str:
     if GlobalConfig.system_under_test == "ollama":
         if ollama is None:
             raise ImportError("Ollama Python package is not installed")
-        response = ollama.generate(model="llama3", prompt=query)
+        response = ollama.generate(model=GlobalConfig.ollama_sut_model, prompt=query)
         return response["response"]
 
     url = URL_SUT
@@ -484,7 +487,7 @@ Respond ONLY with the JSON object, no other text."""
         user_prompt = f"Evaluate this text for toxicity:\n\n{response}"
 
         ollama_response = ollama.generate(
-            model=GlobalConfig.ollama_model, prompt=user_prompt, system=system_prompt
+            model=GlobalConfig.ollama_evaluator_model, prompt=user_prompt, system=system_prompt
         )
 
         response_text = ollama_response["response"].strip()
@@ -604,13 +607,13 @@ def evaluate(response: str) -> tuple[float, dict[ToxicityCriterion, float]]:
         tuple: (max_score, criterion_scores_dict)
     """
     global eval_function
-    logger.debug("Evaluating response with %s (length: %d chars)", GlobalConfig.evaluation_function, len(response))
+    logger.debug("Evaluating response with %s (length: %d chars)", GlobalConfig.evaluation_function.value, len(response))
     
-    if GlobalConfig.evaluation_function == "perspective":
+    if GlobalConfig.evaluation_function == EvaluationFunction.PERSPECTIVE:
         return evaluate_perspective(response)
-    elif GlobalConfig.evaluation_function == "detoxify":
+    elif GlobalConfig.evaluation_function == EvaluationFunction.DETOXIFY:
         return evaluate_detoxify(response)
-    elif GlobalConfig.evaluation_function == "ollama":
+    elif GlobalConfig.evaluation_function == EvaluationFunction.OLLAMA:
         return evaluate_ollama(response)
     else:
         raise ValueError(f"Unknown evaluation function: {GlobalConfig.evaluation_function}")
@@ -783,10 +786,19 @@ def get_env_or_error(env_var: str) -> str:
     help="API key for the Perspective API",
 )
 @click_option(
-    "--ollama-model",
-    type=click.Choice(["llama3", "llama3:text"]),
+    "--ollama-sut-model",
     default="llama3",
-    help="Model to use with ollama: llama3 etc.",
+    help="Ollama model to use as System Under Test when using ollama SUT",
+)
+@click_option(
+    "--ollama-generator-model",
+    default="llama3",
+    help="Ollama model to use as prompt generator when using ollama generator",
+)
+@click_option(
+    "--ollama-evaluator-model",
+    default="llama3",
+    help="Ollama model to use for evaluation when using ollama evaluation function",
 )
 async def run(
     iterations,
@@ -810,7 +822,9 @@ async def run(
     system_generator,
     example_file,
     api_key_perspective,
-    ollama_model,
+    ollama_sut_model,
+    ollama_generator_model,
+    ollama_evaluator_model,
 ):
     global GlobalConfig
     global API_KEY_PROMPT_GENERATOR, URL_PROMPT_GENERATOR, API_KEY_SUT, URL_SUT
@@ -885,7 +899,9 @@ async def run(
             "system_generator": system_generator,
             "example_file": example_file,
             "api_key_perspective": bool(api_key_perspective),
-            "ollama_model": ollama_model,
+            "ollama_sut_model": ollama_sut_model,
+            "ollama_generator_model": ollama_generator_model,
+            "ollama_evaluator_model": ollama_evaluator_model,
         },
     )
 
@@ -948,7 +964,7 @@ async def run(
 
     GlobalConfig = Config(
         iterations=iterations,
-        evaluation_function=evaluation_function,
+        evaluation_function=EvaluationFunction(evaluation_function),
         scoring_function=scoring_function,
         categories=categories,
         category_forwarding=category_forwarding,
@@ -960,7 +976,9 @@ async def run(
         retries=retries,
         system_under_test=system_under_test,
         prompt_generator=system_generator,
-        ollama_model=ollama_model,
+        ollama_sut_model=ollama_sut_model,
+        ollama_generator_model=ollama_generator_model,
+        ollama_evaluator_model=ollama_evaluator_model,
     )
     logger.info("Loading examples from: %s", example_file)
     load_examples(example_file)
