@@ -8,8 +8,79 @@
 \usepackage{amsmath}
 \usepackage{amsfonts}
 \usepackage{amssymb}
-\usepackage{graphicx}
-\usepackage{booktabs}
+\us\begin{frame}[fragile]{E\begin{frame}[fragile]{Local Offline Operation}
+\begin{lstlisting}[language=Python, caption=Ollama Integration for Offline Testing]
+# Local Ollama setup for offline operation
+import ollama
+
+class LocalEvaluationFramework:
+    def __i\begin{frame}{Key Contributions}
+\begin{enumerate}
+\item \textbf{Novel Framework}: Evolutionary approach to automated red-teaming
+\item \textbf{Dual Evaluation Systems}: BERT Detoxify + Ollama LLM assessment
+\item \textbf{Local Offline Operation}: Complete framework via Ollama integration
+\item \textbf{Enhanced Logging}: Comprehensive monitoring and audit capabilities
+\item \textbf{Intelligent Feedback}: Learning-based prompt optimization
+\item \textbf{Empirical Validation}: 50\% efficiency improvement with maintained effectiveness
+\item \textbf{Open Source}: Reproducible research platform for the community
+\end{enumerate>
+
+\vspace{0.5cm}
+\begin{block}{Research Impact}
+EvoTox advances the state-of-the-art in automated adversarial evaluation, enabling more efficient and comprehensive AI safety research with local deployment capabilities
+\end{block}
+\end{frame}       self.client = ollama.Client()
+        # Available models: llama3, qwen2.5, etc.
+        
+    def run_offline_experiment(self, dataset):
+        """Complete offline evaluation capability"""
+        for prompt in dataset:
+            # Generate adversarial variants locally
+            evolved_prompt = self.evolve_prompt_locally(prompt)
+            
+            # Test against local SUT model
+            response = self.client.generate(
+                model='llama3', prompt=evolved_prompt
+            )
+            
+            # Evaluate using local models
+            score = self.evaluate_locally(response)
+\end{lstlisting}
+
+\begin{block}{Key Benefits}
+\begin{itemize}
+\item No internet connection required
+\item Data privacy and security
+\item Consistent evaluation environment
+\item Cost-effective large-scale testing
+\end{itemize}
+\end{block}
+\end{frame}Monitoring}
+\begin{lstlisting}[language=Python, caption=Comprehensive Logging System]
+import logging
+from evotox_logger import setup_logger
+
+# Enhanced logging with detailed tracking
+logger = setup_logger('evotox', 'evotox.log')
+
+def log_experiment_progress(iteration, scores, timing):
+    logger.info(f"Iteration {iteration}: "
+                f"Scores={scores}, "
+                f"Time={timing['total']:.2f}s")
+    
+    # Track convergence patterns
+    logger.debug(f"Convergence metrics: {analyze_convergence()}")
+    
+    # Monitor system performance
+    logger.info(f"Memory usage: {get_memory_usage()}")
+\end{lstlisting}
+
+\begin{itemize}
+\item Detailed experiment tracking and analysis
+\item Performance monitoring and debugging
+\item Comprehensive audit trail for reproducibility
+\end{itemize}
+\end{frame}usepackage{booktabs}
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{tikz}
@@ -142,18 +213,56 @@ How can evolutionary algorithms enhance automated adversarial prompt generation 
 \end{itemize}
 \end{block}
 
-\begin{block}{Key Features}
+\begin{block}{Key Technical Features}
 \begin{itemize}
 \item Evolutionary optimization with memory-based learning
-\item Enhanced evaluation with detailed explanations
-\item Intelligent feedback generation
+\item Dual evaluation systems: BERT Detoxify + Ollama models
+\item Enhanced logging and monitoring capabilities
+\item Local offline operation via Ollama support
 \item Robust error handling and recovery
 \end{itemize}
 \end{block}
 \end{frame}
 
+\begin{frame}{Dual Evaluation Systems}
+\begin{columns}
+\begin{column}{0.5\textwidth}
+\begin{block}{BERT Detoxify Model}
+\begin{itemize}
+\item Pre-trained toxicity classifier
+\item Fast, lightweight evaluation
+\item Standardized scoring (0-1)
+\item Multiple toxicity categories
+\item Reliable baseline assessment
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.5\textwidth}
+\begin{block}{Ollama LLM Evaluation}
+\begin{itemize}
+\item AI-powered detailed analysis
+\item Contextual understanding
+\item Explanatory feedback
+\item Adaptive evaluation criteria
+\item Local offline operation
+\end{itemize}
+\end{block}
+\end{columns}
+
+\vspace{0.3cm}
+\begin{alertblock}{Innovation}
+Combination of both approaches provides comprehensive and robust toxicity assessment
+\end{alertblock}
+\end{frame}
+
 \begin{frame}[fragile]{Enhanced Evaluation System}
-\begin{lstlisting}[language=Python, caption=AI-Powered Evaluation]
+\begin{lstlisting}[language=Python, caption=Dual Evaluation Approach]
+# BERT Detoxify evaluation
+def evaluate_detoxify(response):
+    scores = detoxify_model.predict(response)
+    return max(scores.values())
+
+# Ollama LLM evaluation  
 def evaluate_ollama_with_explanation(response, category):
     prompt = f"""
     Analyze this response for {category} content.
@@ -164,14 +273,13 @@ def evaluate_ollama_with_explanation(response, category):
     
     explanation = ollama_client.generate(prompt)
     score = extract_numerical_score(explanation)
-    
     return score, explanation
 \end{lstlisting}
 
 \begin{itemize}
-\item Detailed toxicity analysis with explanations
+\item Dual evaluation for comprehensive assessment
+\item Local offline operation capability
 \item Category-specific evaluation criteria
-\item Transparent scoring methodology
 \end{itemize}
 \end{frame}
 
